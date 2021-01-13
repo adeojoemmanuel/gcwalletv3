@@ -42,6 +42,7 @@ import { NewFeaturePage } from '../new-feature/new-feature';
 import { AddFundsPage } from '../onboarding/add-funds/add-funds';
 import { AmountPage } from '../send/amount/amount';
 import { AltCurrencyPage } from '../settings/alt-currency/alt-currency';
+import { AtmLocationProvider } from '../../providers/atm-location/atm-location';
 
 export interface Advertisement {
   name: string;
@@ -99,6 +100,8 @@ export class HomePage {
 
   public newResultsReady: boolean = false;
   public newResults: any = [];
+  public loading: boolean;
+  public warnToRefresh: boolean = false;
 
   constructor(
     private persistenceProvider: PersistenceProvider,
@@ -122,7 +125,8 @@ export class HomePage {
     private profileProvider: ProfileProvider,
     private actionSheetProvider: ActionSheetProvider,
     private dynamicLinkProvider: DynamicLinksProvider,
-    private newFeatureData: NewFeatureData
+    private newFeatureData: NewFeatureData,
+    private atmLocationProvider: AtmLocationProvider,
   ) {
     this.logger.info('Loaded: HomePage');
     this.zone = new NgZone({ enableLongStackTrace: false });
@@ -426,6 +430,68 @@ export class HomePage {
       );
     });
   }
+
+    public getClosestTenLocations(geoObj, api): void {
+    this.newResults = [];
+    this.iteratedNum++;
+    this.loading = true;
+
+    /** If geoObj.error is null (meaning it was set to null upon loadGeolocation),
+     * then run first to see api works. If it didnt, then grab data from local json file.
+     */
+    if (geoObj.error === null) {
+      this.newResults = this.atmLocationProvider
+        .getLocationsPromise(geoObj, api)
+        .then(
+          // ** if the response is okay, meaning the api worked,
+          // then you grabbed the new results */
+          res => {
+            this.newResults = res;
+            this.loading = false;
+            this.newResultsReady = true;
+          },
+          // ** If the api didnt work, then next grab data
+          // from the local data
+          err => {
+            this.newResults = this.atmLocationProvider
+              .getLocationsPromise(geoObj, false)
+              .then(
+                res => {
+                  this.newResults = res;
+                  this.loading = false;
+                  this.newResultsReady = true;
+                },
+                err => {
+                  this.logger.warn(err.message);
+                }
+              );
+            this.logger.info(err);
+            this.loading = false;
+          }
+        );
+    } else {
+      /** If geoObj.error had msg in it, then try grabbing the data from the local json
+       * If this failed, then no data to show, so return the error message
+       */
+      this.newResults = this.atmLocationProvider
+        .getLocationsPromise(geoObj, false)
+        .then(
+          res => {
+            this.newResults = res;
+            this.loading = false;
+            this.newResultsReady = true;
+          },
+          err => {
+            this.logger.info(err);
+            this.loading = false;
+          }
+        );
+      this.logger.warn(
+        'Your geolocation is turned off. To better assist you, please eneable the geolocation.'
+      );
+    }
+  }
+
 
   public loadGeolocation(): Promise<any> {
     // this.logger.info('loadGeolocation func entered');
